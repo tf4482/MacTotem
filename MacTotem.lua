@@ -104,32 +104,41 @@ local function Body(names)
   return "#showtooltip\n/castsequence reset=" .. Reset() .. " " .. table.concat(names, ", ")
 end
 
--- create or update the macro in the chosen list; only called out of combat
+-- rewrite every MacTotem macro in a list; true when the list has one
+local function Rewrite(first, count, body)
+  local found = false
+  for index = first, first + count - 1 do
+    if GetMacroInfo(index) == MACRO then
+      found = true
+      if GetMacroBody(index) ~= body then
+        EditMacro(index, MACRO, nil, body)
+      end
+    end
+  end
+  return found
+end
+
+-- rewrite the macro in both lists, create it in the chosen list if missing; never deletes
 local function Apply()
   if not Active() then
     return
   end
   local body = Body(Totems())
   local perCharacter = ns.db.scope == "character"
-  local index = GetMacroIndexByName(MACRO)
-  -- move the macro when it sits in the other list
-  if index > 0 and (index > MAX_ACCOUNT) ~= perCharacter then
-    DeleteMacro(index)
-    index = 0
+  local account, character = GetNumMacros()
+  local inAccount = Rewrite(1, account, body)
+  local inCharacter = Rewrite(MAX_ACCOUNT + 1, character, body)
+  if (perCharacter and inCharacter) or (not perCharacter and inAccount) then
+    return
   end
-  if index == 0 then
-    local account, character = GetNumMacros()
-    if (perCharacter and character >= MAX_CHARACTER) or (not perCharacter and account >= MAX_ACCOUNT) then
-      if not warned then
-        ns.Error("no free " .. ns.db.scope .. " macro slot for " .. MACRO)
-        warned = true
-      end
-      return
+  if (perCharacter and character >= MAX_CHARACTER) or (not perCharacter and account >= MAX_ACCOUNT) then
+    if not warned then
+      ns.Error("no free " .. ns.db.scope .. " macro slot for " .. MACRO)
+      warned = true
     end
-    CreateMacro(MACRO, ICON, body, perCharacter)
-  elseif GetMacroBody(index) ~= body then
-    EditMacro(index, MACRO, nil, body)
+    return
   end
+  CreateMacro(MACRO, ICON, body, perCharacter)
 end
 
 -- update now, or right after combat
@@ -227,7 +236,7 @@ ns.Store("MacTotemDB", defaults, function()
   ns.Settings()
   ns.Checkbox("enabled", "Manage macro", "Keep the MacTotem macro in sync with the active totem bar page", Refresh)
   ns.Dropdown("scope", "Macro list", SCOPES,
-    "Character or general (account) macros; switching moves the macro, so place it on your bar again", Refresh)
+    "Character or general (account) macros; switching creates the macro there, the old one is kept and stays updated", Refresh)
   ns.Slider("reset", "Reset after seconds", 0, 60, 1,
     "Seconds without a cast until the sequence restarts; 0 restarts only after combat", Refresh)
   for index = 1, PER_PAGE do

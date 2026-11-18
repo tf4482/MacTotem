@@ -10,8 +10,9 @@ bar page in sequence.
   Spirits).
 - **Cast order** - choose which element (Earth, Fire, Water, Air) is cast first, second,
   third, and fourth; default is Earth, Fire, Water, Air.
-- **Macro list** - keep the macro in the character macros (default) or the general
-  account macros; switching moves it, so place it on your bar again.
+- **Macro list** - create the macro in the character macros (default) or the general
+  account macros. MacTotem never deletes a macro: after switching, the old one stays and
+  is rewritten too, so delete it yourself if you no longer need it.
 - **Always in sync** - the macro updates when you assign or remove a totem or switch the
   page; changes made in combat apply right after combat.
 - **Reset timer** - the sequence restarts after combat and, optionally, after 1-60
@@ -52,7 +53,7 @@ bar page in sequence.
   press it four times to drop all four.
 - `/mt order fire earth air water`: the macro drops the fire totem first and the water
   totem last; the settings page shows the same order under Totem 1-4.
-- `/mt list account`: the macro moves to the general macros and is shared by all
+- `/mt list account`: MacTotem also creates the macro in the general macros, shared by all
   characters; each shaman with MacTotem rewrites it for their own totem bar.
 - `/mt reset 8` gives `reset=combat/8`: pausing 8 seconds starts again at the first
   totem.
