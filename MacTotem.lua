@@ -17,6 +17,9 @@ local MACRO_CONSTS = Constants and Constants.MacroConsts or {}
 -- general (account) macro limit
 local MAX_ACCOUNT = MAX_ACCOUNT_MACROS or MACRO_CONSTS.MAX_ACCOUNT_MACROS or 120
 
+-- names of the totem sets, one per totem bar page
+local SETS = { "Call of the Elements", "Call of the Ancestors", "Call of the Spirits" }
+
 -- totem elements with their totem slot, in default cast order
 local ELEMENTS = {
   { "earth", "Earth", EARTH_TOTEM_SLOT or 2 },
@@ -63,12 +66,18 @@ local function Page()
   return MultiCastActionBarFrame and MultiCastActionBarFrame.currentPage or 1
 end
 
--- totem names on the active page, in the configured element order
+-- saved key of a cast position within a totem set
+local function Key(page, position)
+  return "order" .. page .. "_" .. position
+end
+
+-- totem names on the active page, in the element order of its totem set
 local function Totems()
   local names = {}
-  local first = ActionBase() + (Page() - 1) * PER_PAGE
+  local page = Page()
+  local first = ActionBase() + (page - 1) * PER_PAGE
   for index = 1, PER_PAGE do
-    local kind, id = GetActionInfo(first + SLOTS[ns.db["order" .. index]])
+    local kind, id = GetActionInfo(first + SLOTS[ns.db[Key(page, index)]])
     local name = kind == "spell" and C_Spell.GetSpellName(id)
     if name then
       names[#names + 1] = name
@@ -77,11 +86,11 @@ local function Totems()
   return names
 end
 
--- configured element order as text
-local function Order()
+-- element order of a totem set as text
+local function Order(page)
   local order = {}
   for index = 1, PER_PAGE do
-    order[index] = ns.db["order" .. index]
+    order[index] = ns.db[Key(page, index)]
   end
   return table.concat(order, ", ")
 end
@@ -129,17 +138,17 @@ local function Refresh()
   ns.AfterCombat(Apply)
 end
 
--- swap the element out of the other position, so every element stays once
-local function KeepUnique(position, element)
+-- swap the element out of the other position of the set, so every element stays once
+local function KeepUnique(page, position, element)
   local used = {}
   for index = 1, PER_PAGE do
-    used[ns.db["order" .. index]] = true
+    used[ns.db[Key(page, index)]] = true
   end
   for index = 1, PER_PAGE do
-    if index ~= position and ns.db["order" .. index] == element then
+    if index ~= position and ns.db[Key(page, index)] == element then
       for _, key in ipairs(ELEMENT_KEYS) do
         if not used[key] then
-          ns.Set("order" .. index, key)
+          ns.Set(Key(page, index), key)
           return
         end
       end
@@ -158,11 +167,13 @@ local function Status()
     hint = ns.Color("warning", " (updates after combat)")
   end
   ns.Print("macro " .. ns.Color("value", MACRO) .. " " .. ns.OnOff(ns.db.enabled) .. hint)
-  ns.Detail("reset " .. ns.Color("value", Reset())
-    .. ", order " .. ns.Color("value", Order()))
+  ns.Detail("reset " .. ns.Color("value", Reset()))
+  for page, set in ipairs(SETS) do
+    ns.Detail(set .. " (" .. page .. "): " .. ns.Color("value", Order(page)))
+  end
   if IsShaman() then
     local names = Totems()
-    ns.Detail("page " .. ns.Color("value", Page()) .. ": "
+    ns.Detail("active: " .. ns.Color("value", SETS[Page()] or Page()) .. ": "
       .. (#names > 0 and ns.Color("value", table.concat(names, ", ")) or ns.Color("muted", "no totems")))
   end
 end
@@ -208,10 +219,12 @@ frame:SetScript("OnEvent", function(_, event, ...)
   events[event](...)
 end)
 
--- saved defaults: off, element order of ELEMENTS
+-- saved defaults: off, element order of ELEMENTS in every totem set
 local defaults = { enabled = false, reset = 0 }
-for index, key in ipairs(ELEMENT_KEYS) do
-  defaults["order" .. index] = key
+for page = 1, PAGES do
+  for index, key in ipairs(ELEMENT_KEYS) do
+    defaults[Key(page, index)] = key
+  end
 end
 
 -- saved state; settings page and first update once loaded
@@ -220,12 +233,16 @@ ns.Store("MacTotemDB", defaults, function()
   ns.Checkbox("enabled", "Manage macro", "Keep the MacTotem macro in sync with the active totem bar page", Refresh)
   ns.Slider("reset", "Reset after seconds", 0, 60, 1,
     "Seconds without a cast until the sequence restarts; 0 restarts only after combat", Refresh)
-  for index = 1, PER_PAGE do
-    ns.Dropdown("order" .. index, "Totem " .. index, ELEMENT_CHOICES,
-      "Element cast at position " .. index .. "; picking a used element swaps it", function(value)
-        KeepUnique(index, value)
-        Refresh()
-      end)
+  -- four order dropdowns per totem set
+  for page, set in ipairs(SETS) do
+    for index = 1, PER_PAGE do
+      ns.Dropdown(Key(page, index), set .. ": Totem " .. index, ELEMENT_CHOICES,
+        "Element cast at position " .. index .. " for " .. set .. "; picking a used element swaps it",
+        function(value)
+          KeepUnique(page, index, value)
+          Refresh()
+        end)
+    end
   end
   Refresh()
 end)
@@ -244,8 +261,9 @@ ns.Command({
 })
 ns.Command({
   name = "order",
-  help = "cast order of the elements, each once",
+  help = "cast order of a totem set (1-3), each element once",
   args = {
+    { name = "set", type = "number", min = 1, max = PAGES },
     { name = "first", choices = ELEMENT_KEYS },
     { name = "second", choices = ELEMENT_KEYS },
     { name = "third", choices = ELEMENT_KEYS },
@@ -261,8 +279,9 @@ ns.Command({
       seen[element] = true
     end
     -- set positions in turn; swaps only touch later positions
+    local page = math.floor(args.set)
     for index, element in ipairs(order) do
-      ns.Set("order" .. index, element)
+      ns.Set(Key(page, index), element)
     end
     Status()
   end,
