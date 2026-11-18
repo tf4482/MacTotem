@@ -1,0 +1,15 @@
+## Interface: 16001
+## Title: MacTotem
+## Notes: Keeps a shaman macro that casts the totems of the active totem bar page in sequence.
+## Author: tf4482
+## Version: @project-version@
+## IconTexture: Interface/Icons/Spell_Nature_StoneSkinTotem
+## SavedVariables: MacTotemDB
+## X-Curse-Project-ID: 1814815
+
+Output.lua
+Store.lua
+Combat.lua
+Settings.lua
+Slash.lua
+MacTotem.lua
