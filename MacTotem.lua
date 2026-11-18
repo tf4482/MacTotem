@@ -1,6 +1,6 @@
 -- MacTotem: keeps a shaman macro that casts the totems of the active totem bar page
 
-local _, ns = ...
+local ADDON, ns = ...
 
 -- name of the managed macro
 local MACRO = "MacTotem"
@@ -227,16 +227,28 @@ for page = 1, PAGES do
   end
 end
 
+-- section header with spacing on the settings page, below the controls added so far
+local function Header(text)
+  local title = C_AddOns.GetAddOnMetadata(ADDON, "Title") or ADDON
+  for _, category in ipairs(SettingsPanel:GetAllCategories()) do
+    if category:GetName() == title then
+      SettingsPanel:GetLayout(category):AddInitializer(CreateSettingsListSectionHeaderInitializer(text))
+      return
+    end
+  end
+end
+
 -- saved state; settings page and first update once loaded
 ns.Store("MacTotemDB", defaults, function()
   ns.Settings()
   ns.Checkbox("enabled", "Manage macro", "Keep the MacTotem macro in sync with the active totem bar page", Refresh)
   ns.Slider("reset", "Reset after seconds", 0, 60, 1,
     "Seconds without a cast until the sequence restarts; 0 restarts only after combat", Refresh)
-  -- four order dropdowns per totem set
+  -- four order dropdowns per totem set, each group under its own header
   for page, set in ipairs(SETS) do
+    Header(set)
     for index = 1, PER_PAGE do
-      ns.Dropdown(Key(page, index), set .. ": Totem " .. index, ELEMENT_CHOICES,
+      ns.Dropdown(Key(page, index), "Totem " .. index, ELEMENT_CHOICES,
         "Element cast at position " .. index .. " for " .. set .. "; picking a used element swaps it",
         function(value)
           KeepUnique(page, index, value)

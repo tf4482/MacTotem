@@ -52,7 +52,7 @@ bar page in sequence.
   press it four times to drop all four.
 - `/mt order 2 fire earth air water`: with Call of the Ancestors active, the macro drops
   the fire totem first and the water totem last; the settings page shows the same order
-  under Call of the Ancestors: Totem 1-4.
+  under the Call of the Ancestors header.
 - `/mt reset 8` gives `reset=combat/8`: pausing 8 seconds starts again at the first
   totem.
 - Switch the totem bar to Call of the Spirits: the macro follows that page at once, or
