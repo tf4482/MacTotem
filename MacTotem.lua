@@ -14,10 +14,8 @@ local PAGES = 3
 local DEFAULT_BASE = 132
 -- macro constants of newer clients
 local MACRO_CONSTS = Constants and Constants.MacroConsts or {}
--- account macro limit; character macros are numbered after it
+-- general (account) macro limit
 local MAX_ACCOUNT = MAX_ACCOUNT_MACROS or MACRO_CONSTS.MAX_ACCOUNT_MACROS or 120
--- character macro limit
-local MAX_CHARACTER = MAX_CHARACTER_MACROS or MACRO_CONSTS.MAX_CHARACTER_MACROS or 18
 
 -- totem elements with their totem slot, in default cast order
 local ELEMENTS = {
@@ -37,9 +35,6 @@ for index, element in ipairs(ELEMENTS) do
   ELEMENT_CHOICES[index] = { element[1], element[2] }
   ELEMENT_KEYS[index] = element[1]
 end
-
--- macro list choices
-local SCOPES = { { "character", "Character" }, { "account", "General (account)" } }
 
 -- full macro list already reported once
 local warned = false
@@ -104,41 +99,29 @@ local function Body(names)
   return "#showtooltip\n/castsequence reset=" .. Reset() .. " " .. table.concat(names, ", ")
 end
 
--- rewrite every MacTotem macro in a list; true when the list has one
-local function Rewrite(first, count, body)
-  local found = false
-  for index = first, first + count - 1 do
-    if GetMacroInfo(index) == MACRO then
-      found = true
-      if GetMacroBody(index) ~= body then
-        EditMacro(index, MACRO, nil, body)
-      end
-    end
-  end
-  return found
-end
-
--- rewrite the macro in both lists, create it in the chosen list if missing; never deletes
+-- rewrite the general macro, create it if missing; never deletes; only called out of combat
 local function Apply()
   if not Active() then
     return
   end
   local body = Body(Totems())
-  local perCharacter = ns.db.scope == "character"
-  local account, character = GetNumMacros()
-  local inAccount = Rewrite(1, account, body)
-  local inCharacter = Rewrite(MAX_ACCOUNT + 1, character, body)
-  if (perCharacter and inCharacter) or (not perCharacter and inAccount) then
-    return
+  local account = GetNumMacros()
+  for index = 1, account do
+    if GetMacroInfo(index) == MACRO then
+      if GetMacroBody(index) ~= body then
+        EditMacro(index, MACRO, nil, body)
+      end
+      return
+    end
   end
-  if (perCharacter and character >= MAX_CHARACTER) or (not perCharacter and account >= MAX_ACCOUNT) then
+  if account >= MAX_ACCOUNT then
     if not warned then
-      ns.Error("no free " .. ns.db.scope .. " macro slot for " .. MACRO)
+      ns.Error("no free general macro slot for " .. MACRO)
       warned = true
     end
     return
   end
-  CreateMacro(MACRO, ICON, body, perCharacter)
+  CreateMacro(MACRO, ICON, body, false)
 end
 
 -- update now, or right after combat
@@ -175,7 +158,7 @@ local function Status()
     hint = ns.Color("warning", " (updates after combat)")
   end
   ns.Print("macro " .. ns.Color("value", MACRO) .. " " .. ns.OnOff(ns.db.enabled) .. hint)
-  ns.Detail("list " .. ns.Color("value", ns.db.scope) .. ", reset " .. ns.Color("value", Reset())
+  ns.Detail("reset " .. ns.Color("value", Reset())
     .. ", order " .. ns.Color("value", Order()))
   if IsShaman() then
     local names = Totems()
@@ -225,8 +208,8 @@ frame:SetScript("OnEvent", function(_, event, ...)
   events[event](...)
 end)
 
--- saved defaults: off, character list, element order of ELEMENTS
-local defaults = { enabled = false, reset = 0, scope = "character" }
+-- saved defaults: off, element order of ELEMENTS
+local defaults = { enabled = false, reset = 0 }
 for index, key in ipairs(ELEMENT_KEYS) do
   defaults["order" .. index] = key
 end
@@ -235,8 +218,6 @@ end
 ns.Store("MacTotemDB", defaults, function()
   ns.Settings()
   ns.Checkbox("enabled", "Manage macro", "Keep the MacTotem macro in sync with the active totem bar page", Refresh)
-  ns.Dropdown("scope", "Macro list", SCOPES,
-    "Character or general (account) macros; switching creates the macro there, the old one is kept and stays updated", Refresh)
   ns.Slider("reset", "Reset after seconds", 0, 60, 1,
     "Seconds without a cast until the sequence restarts; 0 restarts only after combat", Refresh)
   for index = 1, PER_PAGE do
@@ -258,15 +239,6 @@ ns.Command({
   args = { { name = "seconds", type = "number", min = 0, max = 60 } },
   run = function(args)
     ns.Set("reset", math.floor(args.seconds))
-    Status()
-  end,
-})
-ns.Command({
-  name = "list",
-  help = "keep the macro in the character or general (account) macros",
-  args = { { name = "list", choices = { "character", "account" } } },
-  run = function(args)
-    ns.Set("scope", args.list)
     Status()
   end,
 })
