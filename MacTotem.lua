@@ -38,6 +38,19 @@ for index, element in ipairs(ELEMENTS) do
   ELEMENT_CHOICES[index] = { element[1], element[2] }
   ELEMENT_KEYS[index] = element[1]
 end
+-- position without a totem; such positions always sit at the end
+local NONE = "none"
+ELEMENT_CHOICES[#ELEMENT_CHOICES + 1] = { NONE, "None" }
+-- choices for the order command, including none
+local ORDER_KEYS = { NONE }
+for index, key in ipairs(ELEMENT_KEYS) do
+  ORDER_KEYS[index + 1] = key
+end
+
+-- last arranged order per totem set, to know the value before a change
+local known = {}
+-- guard against change callbacks from our own rearranging
+local arranging = false
 
 -- full macro list already reported once
 local warned = false
@@ -77,22 +90,28 @@ local function Totems()
   local page = Page()
   local first = ActionBase() + (page - 1) * PER_PAGE
   for index = 1, PER_PAGE do
-    local kind, id = GetActionInfo(first + SLOTS[ns.db[Key(page, index)]])
-    local name = kind == "spell" and C_Spell.GetSpellName(id)
-    if name then
-      names[#names + 1] = name
+    local slot = SLOTS[ns.db[Key(page, index)]]
+    if slot then
+      local kind, id = GetActionInfo(first + slot)
+      local name = kind == "spell" and C_Spell.GetSpellName(id)
+      if name then
+        names[#names + 1] = name
+      end
     end
   end
   return names
 end
 
--- element order of a totem set as text
+-- element order of a totem set as text, skipped elements left out
 local function Order(page)
   local order = {}
   for index = 1, PER_PAGE do
-    order[index] = ns.db[Key(page, index)]
+    local value = ns.db[Key(page, index)]
+    if value ~= NONE then
+      order[#order + 1] = value
+    end
   end
-  return table.concat(order, ", ")
+  return #order > 0 and table.concat(order, ", ") or NONE
 end
 
 -- reset condition of the cast sequence
@@ -138,22 +157,58 @@ local function Refresh()
   ns.AfterCombat(Apply)
 end
 
--- swap the element out of the other position of the set, so every element stays once
-local function KeepUnique(page, position, element)
-  local used = {}
+-- saved order of a totem set as a list
+local function Saved(page)
+  local list = {}
   for index = 1, PER_PAGE do
-    used[ns.db[Key(page, index)]] = true
+    list[index] = ns.db[Key(page, index)]
   end
-  for index = 1, PER_PAGE do
-    if index ~= position and ns.db[Key(page, index)] == element then
-      for _, key in ipairs(ELEMENT_KEYS) do
-        if not used[key] then
-          ns.Set(Key(page, index), key)
-          return
-        end
-      end
+  return list
+end
+
+-- store an order with elements first and none at the end, without change callbacks
+local function SaveOrder(page, list)
+  local arranged = {}
+  for _, value in ipairs(list) do
+    if value ~= NONE then
+      arranged[#arranged + 1] = value
     end
   end
+  for index = #arranged + 1, PER_PAGE do
+    arranged[index] = NONE
+  end
+  arranging = true
+  for index = 1, PER_PAGE do
+    if ns.db[Key(page, index)] ~= arranged[index] then
+      ns.Set(Key(page, index), arranged[index])
+    end
+  end
+  arranging = false
+  known[page] = arranged
+end
+
+-- position changed: none moves to the end, a used element swaps places
+local function Arrange(page, position, value)
+  if arranging then
+    return
+  end
+  local list = {}
+  for index, old in ipairs(known[page]) do
+    list[index] = old
+  end
+  if value == NONE then
+    table.remove(list, position)
+    list[PER_PAGE] = NONE
+  else
+    for index = 1, PER_PAGE do
+      if index ~= position and list[index] == value then
+        list[index] = list[position]
+      end
+    end
+    list[position] = value
+  end
+  SaveOrder(page, list)
+  Refresh()
 end
 
 -- current state and the totems of the active page
@@ -246,13 +301,14 @@ ns.Store("MacTotemDB", defaults, function()
     "Seconds without a cast until the sequence restarts; 0 restarts only after combat", Refresh)
   -- four order dropdowns per totem set, each group under its own header
   for page, set in ipairs(SETS) do
+    SaveOrder(page, Saved(page))
     Header(set)
     for index = 1, PER_PAGE do
       ns.Dropdown(Key(page, index), "Totem " .. index, ELEMENT_CHOICES,
-        "Element cast at position " .. index .. " for " .. set .. "; picking a used element swaps it",
+        "Element cast at position " .. index .. " for " .. set
+          .. "; a used element swaps places, None skips the totem and moves to the end",
         function(value)
-          KeepUnique(page, index, value)
-          Refresh()
+          Arrange(page, index, value)
         end)
     end
   end
@@ -273,28 +329,25 @@ ns.Command({
 })
 ns.Command({
   name = "order",
-  help = "cast order of a totem set (1-3), each element once",
+  help = "cast order of a totem set (1-3); elements left out are not cast",
   args = {
     { name = "set", type = "number", min = 1, max = PAGES },
-    { name = "first", choices = ELEMENT_KEYS },
-    { name = "second", choices = ELEMENT_KEYS },
-    { name = "third", choices = ELEMENT_KEYS },
-    { name = "fourth", choices = ELEMENT_KEYS },
+    { name = "first", choices = ORDER_KEYS },
+    { name = "second", choices = ORDER_KEYS, optional = true },
+    { name = "third", choices = ORDER_KEYS, optional = true },
+    { name = "fourth", choices = ORDER_KEYS, optional = true },
   },
   run = function(args)
-    local order = { args.first, args.second, args.third, args.fourth }
+    local order = { args.first, args.second or NONE, args.third or NONE, args.fourth or NONE }
     local seen = {}
     for _, element in ipairs(order) do
-      if seen[element] then
-        return ns.Error("name every element once")
+      if seen[element] and element ~= NONE then
+        return ns.Error("name every element at most once")
       end
       seen[element] = true
     end
-    -- set positions in turn; swaps only touch later positions
-    local page = math.floor(args.set)
-    for index, element in ipairs(order) do
-      ns.Set(Key(page, index), element)
-    end
+    SaveOrder(math.floor(args.set), order)
+    Refresh()
     Status()
   end,
 })
