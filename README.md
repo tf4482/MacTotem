@@ -70,9 +70,6 @@ Check the code with [Luacheck](https://github.com/lunarmodules/luacheck) before 
 luacheck .
 ```
 
-Release: push an annotated tag `vX.Y.Z`; GitHub Actions packages the addon with the
-BigWigs packager and publishes it.
-
 ## License
 
 All rights reserved, see [LICENSE](LICENSE).

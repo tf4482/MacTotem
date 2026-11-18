@@ -4,12 +4,12 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.0] - 2026-11-18
 
 ### Added
 
-- General (account) macro `MacTotem` with a `/castsequence` of the totems on the active totem
-  bar page, updated when totems or the page change.
+- General (account) macro `MacTotem` with a `/castsequence` of the totems on the active
+  totem bar page, updated when totems or the page change.
 - Cast order of the elements per totem set, chosen on the settings page or with
   `/mt order`.
 - None in the cast order skips a totem; it always moves to the end.
