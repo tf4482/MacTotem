@@ -24,6 +24,12 @@ bar page in sequence.
   from the addon compartment menu.
 - **Chat commands** - every option can also be changed by slash command.
 
+## Screenshots
+
+![The MacTotem macro with the totems of the active page](docs/macro.png)
+
+![Settings page with the cast order per totem set](docs/settings.png)
+
 ## Install
 
 1. Download `MacTotem-vX.Y.Z.zip` from the [releases](https://github.com/tf4482/MacTotem/releases).
