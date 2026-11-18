@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-11-18
+
+### Changed
+
+- Release zips no longer contain the `VERSION` file.
+- README shows screenshots of the macro and the settings page.
+
 ## [0.1.0] - 2026-11-18
 
 ### Added
