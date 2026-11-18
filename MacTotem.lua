@@ -2,7 +2,7 @@
 
 local _, ns = ...
 
--- name of the managed character macro
+-- name of the managed macro
 local MACRO = "MacTotem"
 -- question mark icon, so #showtooltip shows the next totem
 local ICON = 134400
@@ -12,10 +12,34 @@ local PER_PAGE = 4
 local PAGES = 3
 -- action slot offset of the totem bar when the client does not report it
 local DEFAULT_BASE = 132
--- character macro limit, with fallbacks for older and newer clients
-local MAX_MACROS = MAX_CHARACTER_MACROS
-  or (Constants and Constants.MacroConsts and Constants.MacroConsts.MAX_CHARACTER_MACROS)
-  or 18
+-- macro constants of newer clients
+local MACRO_CONSTS = Constants and Constants.MacroConsts or {}
+-- account macro limit; character macros are numbered after it
+local MAX_ACCOUNT = MAX_ACCOUNT_MACROS or MACRO_CONSTS.MAX_ACCOUNT_MACROS or 120
+-- character macro limit
+local MAX_CHARACTER = MAX_CHARACTER_MACROS or MACRO_CONSTS.MAX_CHARACTER_MACROS or 18
+
+-- totem elements with their totem slot, in default cast order
+local ELEMENTS = {
+  { "earth", "Earth", EARTH_TOTEM_SLOT or 2 },
+  { "fire", "Fire", FIRE_TOTEM_SLOT or 1 },
+  { "water", "Water", WATER_TOTEM_SLOT or 3 },
+  { "air", "Air", AIR_TOTEM_SLOT or 4 },
+}
+-- element key to totem slot
+local SLOTS = {}
+-- element choices for the order dropdowns
+local ELEMENT_CHOICES = {}
+-- element keys for the order command
+local ELEMENT_KEYS = {}
+for index, element in ipairs(ELEMENTS) do
+  SLOTS[element[1]] = element[3]
+  ELEMENT_CHOICES[index] = { element[1], element[2] }
+  ELEMENT_KEYS[index] = element[1]
+end
+
+-- macro list choices
+local SCOPES = { { "character", "Character" }, { "account", "General (account)" } }
 
 -- full macro list already reported once
 local warned = false
@@ -44,19 +68,27 @@ local function Page()
   return MultiCastActionBarFrame and MultiCastActionBarFrame.currentPage or 1
 end
 
--- totem names on the active page, in totem bar order
+-- totem names on the active page, in the configured element order
 local function Totems()
   local names = {}
   local first = ActionBase() + (Page() - 1) * PER_PAGE
   for index = 1, PER_PAGE do
-    local slot = SHAMAN_TOTEM_PRIORITIES and SHAMAN_TOTEM_PRIORITIES[index] or index
-    local kind, id = GetActionInfo(first + slot)
+    local kind, id = GetActionInfo(first + SLOTS[ns.db["order" .. index]])
     local name = kind == "spell" and C_Spell.GetSpellName(id)
     if name then
       names[#names + 1] = name
     end
   end
   return names
+end
+
+-- configured element order as text
+local function Order()
+  local order = {}
+  for index = 1, PER_PAGE do
+    order[index] = ns.db["order" .. index]
+  end
+  return table.concat(order, ", ")
 end
 
 -- reset condition of the cast sequence
@@ -72,23 +104,29 @@ local function Body(names)
   return "#showtooltip\n/castsequence reset=" .. Reset() .. " " .. table.concat(names, ", ")
 end
 
--- create or update the macro; only called out of combat
+-- create or update the macro in the chosen list; only called out of combat
 local function Apply()
   if not Active() then
     return
   end
   local body = Body(Totems())
+  local perCharacter = ns.db.scope == "character"
   local index = GetMacroIndexByName(MACRO)
+  -- move the macro when it sits in the other list
+  if index > 0 and (index > MAX_ACCOUNT) ~= perCharacter then
+    DeleteMacro(index)
+    index = 0
+  end
   if index == 0 then
-    local _, perCharacter = GetNumMacros()
-    if perCharacter >= MAX_MACROS then
+    local account, character = GetNumMacros()
+    if (perCharacter and character >= MAX_CHARACTER) or (not perCharacter and account >= MAX_ACCOUNT) then
       if not warned then
-        ns.Error("no free character macro slot for " .. MACRO)
+        ns.Error("no free " .. ns.db.scope .. " macro slot for " .. MACRO)
         warned = true
       end
       return
     end
-    CreateMacro(MACRO, ICON, body, true)
+    CreateMacro(MACRO, ICON, body, perCharacter)
   elseif GetMacroBody(index) ~= body then
     EditMacro(index, MACRO, nil, body)
   end
@@ -97,6 +135,24 @@ end
 -- update now, or right after combat
 local function Refresh()
   ns.AfterCombat(Apply)
+end
+
+-- swap the element out of the other position, so every element stays once
+local function KeepUnique(position, element)
+  local used = {}
+  for index = 1, PER_PAGE do
+    used[ns.db["order" .. index]] = true
+  end
+  for index = 1, PER_PAGE do
+    if index ~= position and ns.db["order" .. index] == element then
+      for _, key in ipairs(ELEMENT_KEYS) do
+        if not used[key] then
+          ns.Set("order" .. index, key)
+          return
+        end
+      end
+    end
+  end
 end
 
 -- current state and the totems of the active page
@@ -110,9 +166,11 @@ local function Status()
     hint = ns.Color("warning", " (updates after combat)")
   end
   ns.Print("macro " .. ns.Color("value", MACRO) .. " " .. ns.OnOff(ns.db.enabled) .. hint)
+  ns.Detail("list " .. ns.Color("value", ns.db.scope) .. ", reset " .. ns.Color("value", Reset())
+    .. ", order " .. ns.Color("value", Order()))
   if IsShaman() then
     local names = Totems()
-    ns.Detail("page " .. ns.Color("value", Page()) .. ", reset " .. ns.Color("value", Reset()) .. ": "
+    ns.Detail("page " .. ns.Color("value", Page()) .. ": "
       .. (#names > 0 and ns.Color("value", table.concat(names, ", ")) or ns.Color("muted", "no totems")))
   end
 end
@@ -158,12 +216,27 @@ frame:SetScript("OnEvent", function(_, event, ...)
   events[event](...)
 end)
 
+-- saved defaults: off, character list, element order of ELEMENTS
+local defaults = { enabled = false, reset = 0, scope = "character" }
+for index, key in ipairs(ELEMENT_KEYS) do
+  defaults["order" .. index] = key
+end
+
 -- saved state; settings page and first update once loaded
-ns.Store("MacTotemDB", { enabled = false, reset = 0 }, function()
+ns.Store("MacTotemDB", defaults, function()
   ns.Settings()
   ns.Checkbox("enabled", "Manage macro", "Keep the MacTotem macro in sync with the active totem bar page", Refresh)
+  ns.Dropdown("scope", "Macro list", SCOPES,
+    "Character or general (account) macros; switching moves the macro, so place it on your bar again", Refresh)
   ns.Slider("reset", "Reset after seconds", 0, 60, 1,
     "Seconds without a cast until the sequence restarts; 0 restarts only after combat", Refresh)
+  for index = 1, PER_PAGE do
+    ns.Dropdown("order" .. index, "Totem " .. index, ELEMENT_CHOICES,
+      "Element cast at position " .. index .. "; picking a used element swaps it", function(value)
+        KeepUnique(index, value)
+        Refresh()
+      end)
+  end
   Refresh()
 end)
 
@@ -176,6 +249,40 @@ ns.Command({
   args = { { name = "seconds", type = "number", min = 0, max = 60 } },
   run = function(args)
     ns.Set("reset", math.floor(args.seconds))
+    Status()
+  end,
+})
+ns.Command({
+  name = "list",
+  help = "keep the macro in the character or general (account) macros",
+  args = { { name = "list", choices = { "character", "account" } } },
+  run = function(args)
+    ns.Set("scope", args.list)
+    Status()
+  end,
+})
+ns.Command({
+  name = "order",
+  help = "cast order of the elements, each once",
+  args = {
+    { name = "first", choices = ELEMENT_KEYS },
+    { name = "second", choices = ELEMENT_KEYS },
+    { name = "third", choices = ELEMENT_KEYS },
+    { name = "fourth", choices = ELEMENT_KEYS },
+  },
+  run = function(args)
+    local order = { args.first, args.second, args.third, args.fourth }
+    local seen = {}
+    for _, element in ipairs(order) do
+      if seen[element] then
+        return ns.Error("name every element once")
+      end
+      seen[element] = true
+    end
+    -- set positions in turn; swaps only touch later positions
+    for index, element in ipairs(order) do
+      ns.Set("order" .. index, element)
+    end
     Status()
   end,
 })
