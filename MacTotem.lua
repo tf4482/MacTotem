@@ -282,17 +282,6 @@ for page = 1, PAGES do
   end
 end
 
--- section header with spacing on the settings page, below the controls added so far
-local function Header(text)
-  local title = C_AddOns.GetAddOnMetadata(ADDON, "Title") or ADDON
-  for _, category in ipairs(SettingsPanel:GetAllCategories()) do
-    if category:GetName() == title then
-      SettingsPanel:GetLayout(category):AddInitializer(CreateSettingsListSectionHeaderInitializer(text))
-      return
-    end
-  end
-end
-
 -- saved state; settings page and first update once loaded
 ns.Store("MacTotemDB", defaults, function()
   ns.Settings()
@@ -302,7 +291,7 @@ ns.Store("MacTotemDB", defaults, function()
   -- four order dropdowns per totem set, each group under its own header
   for page, set in ipairs(SETS) do
     SaveOrder(page, Saved(page))
-    Header(set)
+    ns.Header(set)
     for index = 1, PER_PAGE do
       ns.Dropdown(Key(page, index), "Totem " .. index, ELEMENT_CHOICES,
         "Element cast at position " .. index .. " for " .. set

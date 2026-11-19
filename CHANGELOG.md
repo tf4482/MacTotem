@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-11-19
+
+### Fixed
+
+- Opening the key bindings in the options no longer reports that MacTotem was blocked
+  from an action only available to the Blizzard UI.
+
 ## [0.1.1] - 2026-11-18
 
 ### Changed
