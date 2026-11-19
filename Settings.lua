@@ -1,10 +1,10 @@
 -- Shared component: Blizzard settings page and addon compartment entry bound to ns.db;
--- copied unchanged from wow-lua-house-style
+-- from wow-lua-house-style, plus ns.Header
 
 local ADDON, ns = ...
 
--- settings category of this addon
-local category
+-- settings category of this addon and its layout
+local category, layout
 
 -- TOC field of this addon
 local function Meta(field)
@@ -19,7 +19,7 @@ end
 -- create the settings page and the compartment entry; call once ns.db is loaded
 function ns.Settings()
   local title = Meta("Title") or ADDON
-  category = Settings.RegisterVerticalLayoutCategory(title)
+  category, layout = Settings.RegisterVerticalLayoutCategory(title)
   Settings.RegisterAddOnCategory(category)
   if AddonCompartmentFrame then
     AddonCompartmentFrame:RegisterAddon({
@@ -34,6 +34,11 @@ end
 -- change a setting from chat; updates ns.db and the page, runs onChange
 function ns.Set(key, value)
   Settings.SetValue(ADDON .. "_" .. key, value)
+end
+
+-- section header below the controls added so far; never touch SettingsPanel (taints keybindings)
+function ns.Header(text)
+  layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(text))
 end
 
 -- bind ns.db[key] with its Store default; onChange(value) runs after each change
