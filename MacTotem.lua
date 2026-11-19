@@ -1,6 +1,6 @@
 -- MacTotem: keeps a shaman macro that casts the totems of the active totem bar page
 
-local ADDON, ns = ...
+local _, ns = ...
 
 -- name of the managed macro
 local MACRO = "MacTotem"
