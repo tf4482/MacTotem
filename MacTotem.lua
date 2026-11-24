@@ -54,6 +54,8 @@ local arranging = false
 
 -- full macro list already reported once
 local warned = false
+-- macros received from the game; creating before that would duplicate the macro
+local macrosLoaded = false
 
 -- whether the player is a shaman
 local function IsShaman()
@@ -133,14 +135,18 @@ local function Apply()
     return
   end
   local body = Body(Totems())
-  local account = GetNumMacros()
-  for index = 1, account do
-    if GetMacroInfo(index) == MACRO then
-      if GetMacroBody(index) ~= body then
-        EditMacro(index, MACRO, nil, body)
-      end
-      return
+  local index = GetMacroIndexByName(MACRO)
+  if index and index > 0 then
+    if GetMacroBody(index) ~= body then
+      EditMacro(index, MACRO, nil, body)
     end
+    return
+  end
+  local account = GetNumMacros()
+  -- existing general macros also prove the list is loaded, e.g. after /reload
+  macrosLoaded = macrosLoaded or account > 0
+  if not macrosLoaded then
+    return
   end
   if account >= MAX_ACCOUNT then
     if not warned then
@@ -252,6 +258,12 @@ function events.PLAYER_ENTERING_WORLD()
   Refresh()
 end
 
+-- macro list loaded or changed: allows the first create
+function events.UPDATE_MACROS()
+  macrosLoaded = true
+  Refresh()
+end
+
 -- totem bar rebuilt, e.g. after learning totems
 function events.UPDATE_MULTI_CAST_ACTIONBAR()
   Refresh()
@@ -290,7 +302,6 @@ ns.Store("MacTotemDB", defaults, function()
     "Seconds without a cast until the sequence restarts; 0 restarts only after combat", Refresh)
   -- four order dropdowns per totem set, each group under its own header
   for page, set in ipairs(SETS) do
-    SaveOrder(page, Saved(page))
     ns.Header(set)
     for index = 1, PER_PAGE do
       ns.Dropdown(Key(page, index), "Totem " .. index, ELEMENT_CHOICES,
@@ -300,6 +311,8 @@ ns.Store("MacTotemDB", defaults, function()
           Arrange(page, index, value)
         end)
     end
+    -- tidy the saved order once its dropdowns are bound, so ns.Set finds the settings
+    SaveOrder(page, Saved(page))
   end
   Refresh()
 end)

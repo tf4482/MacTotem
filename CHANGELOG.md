@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Loading no longer fails when the saved cast order needs tidying before the settings
+  page is built.
+- Logging in or entering the world no longer creates a second `MacTotem` macro before
+  the macro list is loaded.
+
 ## [0.1.2] - 2026-11-19
 
 ### Fixed
