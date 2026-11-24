@@ -5,6 +5,7 @@
 ## Version: @project-version@
 ## IconTexture: Interface/Icons/Spell_Nature_StoneSkinTotem
 ## SavedVariables: MacTotemDB
+## SavedVariablesPerCharacter: MacTotemCharDB
 ## X-Curse-Project-ID: 1814815
 
 Output.lua
