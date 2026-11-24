@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-24
+
 ### Added
 
 - "Per character" checkbox on the settings page and `/mt character on|off`: settings for
