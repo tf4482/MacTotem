@@ -19,7 +19,8 @@ bar page in sequence.
 - **Reset timer** - the sequence restarts after combat and, optionally, after 1-60
   seconds without a cast.
 - **Shamans only** - other classes get no macro.
-- **Remembered** - settings are saved per account; default is off.
+- **Remembered** - settings are saved per account, or per character with one checkbox;
+  default is off.
 - **Settings page** - all options in the game menu under Options > AddOns, also opened
   from the addon compartment menu.
 - **Chat commands** - every option can also be changed by slash command.
@@ -32,7 +33,8 @@ bar page in sequence.
 
 ## Install
 
-1. Download `MacTotem-vX.Y.Z.zip` from the [releases](https://github.com/tf4482/MacTotem/releases).
+1. Download `MacTotem-vX.Y.Z.zip` from the
+   [releases](https://github.com/tf4482/MacTotem/releases) (or CurseForge).
 2. Unzip it into `World of Warcraft/_forever_/Interface/AddOns/`.
 3. Restart the game or type `/reload`.
 4. Type `/mt on`, then drag `MacTotem` from the macro window (`/macro`, general tab)
@@ -44,8 +46,13 @@ bar page in sequence.
 /mt                              show the state and the totems of the active page
 /mt on                           manage the macro
 /mt off                          stop managing the macro (the macro stays as it is)
-/mt reset <s>                    restart the sequence after s seconds, 0 = only after combat
+/mt restart <s>                  restart the sequence after s seconds, 0 = only after combat
 /mt order <set> <a> [b] [c] [d]  cast order of set 1-3: earth, fire, water, air; left out = none
+/mt character on                 use settings for this character only
+/mt character off                use the account settings again
+/mt test                         write the macro once now and show its text
+/mt reset                        reset the settings to defaults
+/mt debug on                     show what the addon does, until /reload
 /mt config                       open the settings page
 /mt help                         list all commands
 ```
@@ -62,8 +69,10 @@ bar page in sequence.
   under the Call of the Ancestors header.
 - `/mt order 1 earth air`: Call of the Elements drops only the earth and air totems; fire
   and water show None at positions 3 and 4.
-- `/mt reset 8` gives `reset=combat/8`: pausing 8 seconds starts again at the first
+- `/mt restart 8` gives `reset=combat/8`: pausing 8 seconds starts again at the first
   totem.
+- `/mt character on` on an alt, then `/mt order 1 fire earth`: only this shaman uses
+  that order; the other characters keep the account order.
 - Switch the totem bar to Call of the Spirits: the macro follows that page at once, or
   right after combat.
 
@@ -75,6 +84,11 @@ Check the code with [Luacheck](https://github.com/lunarmodules/luacheck) before 
 ```text
 luacheck .
 ```
+
+Deploy locally: run `deploy.bat`; it builds `release/MacTotem-vX.Y.Z.zip` from `VERSION`.
+
+Release: set `VERSION` to `X.Y.Z`, then push an annotated tag `vX.Y.Z`; GitHub Actions
+packages the addon with the BigWigs packager and publishes it.
 
 ## License
 

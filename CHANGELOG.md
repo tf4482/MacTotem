@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 
 ## [Unreleased]
 
+### Added
+
+- "Per character" checkbox on the settings page and `/mt character on|off`: settings for
+  this character only, or the account's.
+- `/mt test` writes the macro once now and shows its text.
+- `/mt reset` restores the default settings; `/mt debug on|off` shows what the addon does.
+
+### Changed
+
+- The reset timer command is now `/mt restart <s>`; enabled users see one chat line about
+  it once. Saved settings stay as they are.
+- Release zips no longer contain the icon image.
+
 ### Fixed
 
 - Loading no longer fails when the saved cast order needs tidying before the settings
