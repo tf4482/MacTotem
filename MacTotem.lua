@@ -14,6 +14,8 @@ local PAGES = 3
 local DEFAULT_BASE = 132
 -- macro constants of newer clients
 local MACRO_CONSTS = Constants and Constants.MacroConsts or {}
+-- version of the last command change, announced once
+local NOTICE = "0.2.0"
 -- general (account) macro limit
 local MAX_ACCOUNT = MAX_ACCOUNT_MACROS or MACRO_CONSTS.MAX_ACCOUNT_MACROS or 120
 
@@ -51,6 +53,8 @@ end
 local known = {}
 -- guard against change callbacks from our own rearranging
 local arranging = false
+-- per-character state the known orders belong to
+local profile
 
 -- full macro list already reported once
 local warned = false
@@ -64,7 +68,7 @@ end
 
 -- whether the macro should be managed now
 local function Active()
-  return ns.db ~= nil and ns.db.enabled and IsShaman()
+  return ns.db ~= nil and ns.Get("enabled") and IsShaman()
 end
 
 -- action slot offset of the totem bar
@@ -92,7 +96,7 @@ local function Totems()
   local page = Page()
   local first = ActionBase() + (page - 1) * PER_PAGE
   for index = 1, PER_PAGE do
-    local slot = SLOTS[ns.db[Key(page, index)]]
+    local slot = SLOTS[ns.Get(Key(page, index))]
     if slot then
       local kind, id = GetActionInfo(first + slot)
       local name = kind == "spell" and C_Spell.GetSpellName(id)
@@ -108,7 +112,7 @@ end
 local function Order(page)
   local order = {}
   for index = 1, PER_PAGE do
-    local value = ns.db[Key(page, index)]
+    local value = ns.Get(Key(page, index))
     if value ~= NONE then
       order[#order + 1] = value
     end
@@ -118,7 +122,8 @@ end
 
 -- reset condition of the cast sequence
 local function Reset()
-  return ns.db.reset > 0 and "combat/" .. ns.db.reset or "combat"
+  local seconds = ns.Get("reset")
+  return seconds > 0 and "combat/" .. seconds or "combat"
 end
 
 -- macro text for the given totems; tooltip only when the page is empty
@@ -167,17 +172,19 @@ end
 local function Saved(page)
   local list = {}
   for index = 1, PER_PAGE do
-    list[index] = ns.db[Key(page, index)]
+    list[index] = ns.Get(Key(page, index))
   end
   return list
 end
 
--- store an order with elements first and none at the end, without change callbacks
+-- store an order with each element once first and none at the end, without change callbacks
 local function SaveOrder(page, list)
   local arranged = {}
+  local used = {}
   for _, value in ipairs(list) do
-    if value ~= NONE then
+    if value ~= NONE and not used[value] then
       arranged[#arranged + 1] = value
+      used[value] = true
     end
   end
   for index = #arranged + 1, PER_PAGE do
@@ -185,7 +192,7 @@ local function SaveOrder(page, list)
   end
   arranging = true
   for index = 1, PER_PAGE do
-    if ns.db[Key(page, index)] ~= arranged[index] then
+    if ns.Get(Key(page, index)) ~= arranged[index] then
       ns.Set(Key(page, index), arranged[index])
     end
   end
@@ -193,9 +200,23 @@ local function SaveOrder(page, list)
   known[page] = arranged
 end
 
+-- re-read every totem set from the active profile, e.g. after a profile switch or reset
+local function Resync()
+  for page = 1, PAGES do
+    SaveOrder(page, Saved(page))
+  end
+  profile = ns.char.perCharacter
+end
+
 -- position changed: none moves to the end, a used element swaps places
 local function Arrange(page, position, value)
   if arranging then
+    return
+  end
+  -- profile switched: take over its orders instead of treating this as a change
+  if ns.char.perCharacter ~= profile then
+    Resync()
+    Refresh()
     return
   end
   local list = {}
@@ -222,12 +243,12 @@ local function Status()
   local hint = ""
   if not IsShaman() then
     hint = ns.Color("warning", " (shamans only)")
-  elseif not ns.db.enabled then
+  elseif not ns.Get("enabled") then
     hint = ns.Color("muted", " - turn on with ") .. ns.Color("command", ns.slash .. " on")
   elseif InCombatLockdown() then
     hint = ns.Color("warning", " (updates after combat)")
   end
-  ns.Print("macro " .. ns.Color("value", MACRO) .. " " .. ns.OnOff(ns.db.enabled) .. hint)
+  ns.Print("macro " .. ns.Color("value", MACRO) .. " " .. ns.OnOff(ns.Get("enabled")) .. hint)
   ns.Detail("reset " .. ns.Color("value", Reset()))
   for page, set in ipairs(SETS) do
     ns.Detail(set .. " (" .. page .. "): " .. ns.Color("value", Order(page)))
@@ -237,12 +258,29 @@ local function Status()
     ns.Detail("active: " .. ns.Color("value", SETS[Page()] or Page()) .. ": "
       .. (#names > 0 and ns.Color("value", table.concat(names, ", ")) or ns.Color("muted", "no totems")))
   end
+  ns.Detail("per character " .. ns.OnOff(ns.char.perCharacter))
 end
 
 -- switch the macro management and report the new state
 local function Switch(enabled)
   ns.Set("enabled", enabled)
   Status()
+end
+
+-- switch per-character settings and report the new state
+local function PerCharacter(enabled)
+  ns.Set("perCharacter", enabled)
+  Status()
+end
+
+-- write the macro once now and show its text, for checking it in game
+local function Test()
+  Refresh()
+  ns.Print("test: macro " .. ns.Color("value", MACRO) .. (InCombatLockdown() and " updates after combat" or " updated"))
+  ns.Detail(ns.Color("value", Body(Totems())))
+  if not Active() then
+    ns.Warn("inactive: " .. (IsShaman() and "turn on with " .. ns.slash .. " on" or "shamans only"))
+  end
 end
 
 -- follow page changes on the Blizzard totem bar
@@ -255,17 +293,20 @@ local events = {}
 
 -- world ready: action slots are known
 function events.PLAYER_ENTERING_WORLD()
+  ns.Debug("world entered")
   Refresh()
 end
 
 -- macro list loaded or changed: allows the first create
 function events.UPDATE_MACROS()
+  ns.Debug("macros loaded")
   macrosLoaded = true
   Refresh()
 end
 
 -- totem bar rebuilt, e.g. after learning totems
 function events.UPDATE_MULTI_CAST_ACTIONBAR()
+  ns.Debug("totem bar rebuilt")
   Refresh()
 end
 
@@ -273,6 +314,7 @@ end
 function events.ACTIONBAR_SLOT_CHANGED(slot)
   local base = ActionBase()
   if not slot or slot == 0 or (slot > base and slot <= base + PAGES * PER_PAGE) then
+    ns.Debug("totem bar slot " .. tostring(slot) .. " changed")
     Refresh()
   end
 end
@@ -280,14 +322,15 @@ end
 -- one frame dispatching all events above
 local frame = CreateFrame("Frame")
 for event in pairs(events) do
-  frame:RegisterEvent(event)
+  -- skip events this client does not know
+  if C_EventUtils.IsEventValid(event) then frame:RegisterEvent(event) end
 end
 frame:SetScript("OnEvent", function(_, event, ...)
   events[event](...)
 end)
 
 -- saved defaults: off, element order of ELEMENTS in every totem set
-local defaults = { enabled = false, reset = 0 }
+local defaults = { enabled = false, reset = 0, notice = "" }
 for page = 1, PAGES do
   for index, key in ipairs(ELEMENT_KEYS) do
     defaults[Key(page, index)] = key
@@ -311,8 +354,16 @@ ns.Store("MacTotemDB", defaults, function()
           Arrange(page, index, value)
         end)
     end
-    -- tidy the saved order once its dropdowns are bound, so ns.Set finds the settings
-    SaveOrder(page, Saved(page))
+  end
+  -- tidy the saved orders once their dropdowns are bound, so ns.Set finds the settings
+  Resync()
+  -- one line once for users of the renamed reset command
+  if ns.db.notice ~= NOTICE then
+    if ns.Get("enabled") then
+      ns.Print("the reset timer is now " .. ns.Color("command", ns.slash .. " restart <s>")
+        .. "; " .. ns.Color("command", ns.slash .. " reset") .. " restores the default settings")
+    end
+    ns.db.notice = NOTICE
   end
   Refresh()
 end)
@@ -321,7 +372,7 @@ end)
 ns.Command({ name = "on", help = "manage the macro", run = function() Switch(true) end })
 ns.Command({ name = "off", help = "stop managing the macro", run = function() Switch(false) end })
 ns.Command({
-  name = "reset",
+  name = "restart",
   help = "seconds until the sequence restarts, 0 = only after combat",
   args = { { name = "seconds", type = "number", min = 0, max = 60 } },
   run = function(args)
@@ -351,6 +402,35 @@ ns.Command({
     SaveOrder(math.floor(args.set), order)
     Refresh()
     Status()
+  end,
+})
+ns.Command({
+  name = "character",
+  help = "use settings for this character only, or the account's",
+  args = { { name = "state", choices = { "on", "off" } } },
+  run = function(args) PerCharacter(args.state == "on") end,
+})
+ns.Command({ name = "test", help = "write the macro once now and show its text", run = Test })
+ns.Command({
+  name = "reset",
+  help = "reset the active profile's settings to defaults",
+  run = function()
+    arranging = true
+    ns.ResetSettings()
+    arranging = false
+    Resync()
+    Refresh()
+    ns.Success("settings reset to defaults")
+    Status()
+  end,
+})
+ns.Command({
+  name = "debug",
+  help = "show what the addon does in chat, until /reload",
+  args = { { name = "state", choices = { "on", "off" } } },
+  run = function(args)
+    ns.debug = args.state == "on"
+    ns.Status("debug", ns.OnOff(ns.debug))
   end,
 })
 ns.Command({ name = "config", help = "open the settings page", run = ns.OpenSettings })
