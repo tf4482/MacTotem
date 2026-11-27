@@ -24,6 +24,7 @@ read_globals = {
   "IsInRaid",
   "MinimalSliderWithSteppersMixin",
   "Settings",
+  "SettingsDropdownControlMixin",
   "AIR_TOTEM_SLOT",
   "C_ActionBar",
   "C_Spell",
